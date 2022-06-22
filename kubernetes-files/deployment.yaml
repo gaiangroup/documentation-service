@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: documentation-service
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: documentation-service
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - endpoints
+    verbs:
+      - create
+      - get
+      - list
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: documentation-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: documentation-service
+subjects:
+  - kind: ServiceAccount
+    name: documentation-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: documentation-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: documentation-service
+  template:
+    metadata:
+      name: documentation-service
+      labels:
+        app: documentation-service
+        version: v1
+    spec:
+      containers:
+      - name: documentation-service
+        image: REG/IMAGE:TAG
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "7Gi"
+            cpu: "900m"
+          limits:
+            memory: "7.2Gi"
+            cpu: "950m"
+        ports:
+        - containerPort: 8080
+        env:
+          - name: VERSION
+            value: "v1"
+      serviceAccountName: documentation-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentation-service
+  labels:
+    app: documentation-service
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      name: http
+  selector:
+    app: documentation-service
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: documentation-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: documentation-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: External
+      external:
+        metric:
+          name: "kafka_lag_external_metric"
+          selector:
+            matchLabels:
+              topic: "engagement.delivery.email"
+              group: "email_engagements"
+        target:
+          type: AverageValue
+          averageValue: 1000
